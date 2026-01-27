@@ -1,0 +1,199 @@
+# This file goes through all the input rgb images in a dataset
+# and extracts matched feature points. For the depth value of the
+# feature points, the ground truth value from the dataset is used.
+
+import cv2
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+
+from os.path import exists
+from pathlib import Path
+
+from cli.data_utils.model_dataset.model_dataset import get_model_dataset
+
+
+
+
+def debug_draw_keypoints(img, points, color=(0, 255, 0)):
+    """img: cv2 img, points: list of points with (row, col) each."""
+
+    # iterate over points
+    for point in points.astype(int):
+
+        # cv2 uses x,y axis notation
+        xy_tuple = (point[1], point[0])
+
+        # draw circle
+        img = cv2.circle(img, xy_tuple, color=color, radius=8, thickness=2)
+
+    return img
+
+
+def debug_draw_lines(img1, img2, lines, pts, pts_prev):
+    """img1 - image on which we draw the epilines for the points in img2
+    lines - corresponding epilines"""
+
+    _, width, _ = img1.shape
+
+    for line, pt, pt_prev in zip(lines, pts, pts_prev):
+        color = tuple(np.random.randint(0, 255, 3).tolist())
+        x0, y0 = map(int, [0, -line[2] / line[1]])
+        x1, y1 = map(int, [width, -(line[2] + line[0] * width) / line[1]])
+        img1 = cv2.line(img1, (x0, y0), (x1, y1), color, 1)
+        img1 = cv2.circle(img1, tuple(pt.astype(int)), 5, color, -1)
+        img2 = cv2.circle(img2, tuple(pt_prev.astype(int)), 5, color, -1)
+
+    return img1, img2
+
+
+def get_keypoints_and_descriptors(img, n_rows, n_cols, n_keypoints):
+    """Extract keypoints and descriptors. Img is divided into n_rows x n_cols patches,
+    features are extracted for every patch separately to have features more uniform across the img."""
+
+    height, width, _ = img.shape
+    n_keypoints_patch = int(n_keypoints / (n_rows * n_cols))
+
+    # edges for patch indices
+    row_step = height / n_rows
+    col_step = width / n_cols
+    row_edges = np.array(range(n_rows + 1), dtype=float)
+    col_edges = np.array(range(n_cols + 1), dtype=float)
+    row_edges = (row_edges * row_step).astype(int)
+    col_edges = (col_edges * col_step).astype(int)
+
+    # sift detector
+    detector = cv2.SIFT_create(
+        nfeatures=n_keypoints_patch,
+        contrastThreshold=0.0,  # dont filter by contrast, instead filter by matching subsequent frames and epipolar constraints
+    )
+
+    # extract keypoints for each patch
+    kp = []
+    descriptors = []
+    for i in range(n_rows):
+        for j in range(n_cols):
+
+            # create patch from img
+            patch = img[
+                row_edges[i] : row_edges[i + 1], col_edges[j] : col_edges[j + 1]
+            ]
+
+            # extract features for patch
+            kp_patch, descriptors_patch = detector.detectAndCompute(patch, None)
+
+            # continue if zero detections
+            if len(kp_patch) <= 0:
+                continue
+
+            # shift kp
+            for k in range(len(kp_patch)):
+                pt_np_shifted = np.array(kp_patch[k].pt)
+                pt_np_shifted += [col_edges[j], row_edges[i]]
+                kp_patch[k].pt = tuple(pt_np_shifted)
+
+            kp += kp_patch
+            descriptors.append(descriptors_patch)
+
+    descriptors = np.concatenate(descriptors)
+
+    return kp, descriptors
+
+
+def create_features_file(samples_idx_file):
+
+    ##########################################
+    ################# CONFIG #################
+    ##########################################
+
+    # grid
+    n_rows, n_cols = 4, 4
+
+    # n features
+    n_keypoints_matching = 1000  # num  keypoints for every image for matching
+    n_keypoints_direct = 400  # num keypoints (direct sampling without matching)
+    n_keypoints_min = 200  # min keypoints for depth samples
+
+    # output shapes
+    in_height = 480
+    in_width = 640
+    out_height = 240
+    out_width = 320
+
+    # get img paths
+    dataset = get_model_dataset(samples_idx_file=samples_idx_file, shuffle=False)
+    path_tuples = dataset.path_tuples
+
+    ##########################################
+    ##########################################
+    ##########################################
+
+
+    # print config
+    print(f"input shape: {in_width}x{in_height}")
+    print(f"output shape: {out_width}x{out_height}")
+    print(f"{n_keypoints_matching} keypoints per img, devided in {n_rows}x{n_cols} cells.")
+
+    # for all imgs
+    n_tuples = len(path_tuples)
+    i = 0
+
+    # main loop
+    for path_tuple in path_tuples:
+
+        # paths
+        rgb_path = path_tuple[0]
+        depth_path = path_tuple[1]
+        out_path = path_tuple[2]
+
+        # read imgs
+        img = cv2.imread(rgb_path)  # , cv2.IMREAD_GRAYSCALE)
+        depth = cv2.imread(depth_path, cv2.IMREAD_UNCHANGED)
+        # resize imgs
+        img = cv2.resize(img, dsize=(in_width, in_height))
+        depth = cv2.resize(
+            depth,
+            dsize=(out_width, out_height),
+            interpolation=cv2.INTER_NEAREST,  # make sure depth is not interpolated
+        )
+
+        # for usage right now
+        standalone_keypoints, _ = get_keypoints_and_descriptors(
+            img, n_rows, n_cols, n_keypoints_direct
+        )
+
+        # convert to np (row x column convention)
+        pts = np.array([[kp.pt[1], kp.pt[0]] for kp in standalone_keypoints])
+
+
+        # index transform to fit output shape
+        height_scale = out_height / in_height
+        width_scale = out_width / in_width
+        pts_scaled = pts * [height_scale, width_scale]
+
+        # get depth values
+        depth_values = depth[
+            pts_scaled[:, 0].round().astype(int),
+            pts_scaled[:, 1].round().astype(int),
+        ]
+        depth_values = depth_values[..., np.newaxis]
+
+        # concat
+        row_col_depth = np.hstack((pts_scaled, depth_values))
+
+        # filter out features where depth is invalid (= 0)
+        valid_mask = row_col_depth[:, 2] > 0.0
+        row_col_depth = row_col_depth[valid_mask, :]
+
+        # write output file
+        if not exists(Path(out_path).parent):
+            Path(out_path).parent.mkdir(parents=True, exist_ok=True)
+        pd.DataFrame(row_col_depth).to_csv(
+            out_path, header=["row", "column", "depth"], index=None
+        )
+
+        if i % 50 == 0:
+            print(f"processed {i}/{n_tuples}: {len(row_col_depth)} priors")
+        i += 1
+
+    print("Done.")
