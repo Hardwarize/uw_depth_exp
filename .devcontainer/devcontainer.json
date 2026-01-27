@@ -1,0 +1,30 @@
+{
+  "name": "Python 3.12 Tethys UWDepth Experiments",
+  // CAMBIO PRINCIPAL: Usamos la imagen específica de Python 3.12
+  "image": "mcr.microsoft.com/devcontainers/python:3.12",
+  // Mantenemos tu montaje de carpeta
+  "mounts": [
+    "source=/home/student/Tethys_computer_vision_dataset,target=/workspaces/Tethys_computer_vision_dataset,type=bind",
+    "source=/home/student/FLSea_test_split,target=/workspaces/FLSea_test_split,type=bind"
+  ],
+  // Opcional: Instala dependencias automáticamente si tienes un requirements.txt
+  "postCreateCommand": "sudo apt-get update && sudo apt-get install -y libgl1 && pip install --upgrade pip && pip install -r dependencies.txt",
+  // SOLUCIÓN PARA GPU: Permite acceso a la GPU del host
+  "runArgs": [
+    "--gpus",
+    "all"
+  ],
+  "customizations": {
+    "vscode": {
+      "settings": {
+        // Selecciona el intérprete de Python por defecto
+        "python.defaultInterpreterPath": "/usr/local/bin/python"
+      },
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance"
+      ]
+    }
+  },
+  "remoteUser": "vscode"
+}

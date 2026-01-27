@@ -2,9 +2,10 @@
 numpy
 pandas
 matplotlib
+scipy
 
 # opencv
-opencv-python  # needs "pip install --upgrade pip" first
+opencv-python==4.12.0.88  # needs "pip install --upgrade pip" first
 opencv-contrib-python
 
 # torch
