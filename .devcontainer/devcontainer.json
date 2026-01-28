@@ -4,8 +4,9 @@
   "image": "mcr.microsoft.com/devcontainers/python:3.12",
   // Mantenemos tu montaje de carpeta
   "mounts": [
-    "source=/home/student/Tethys_computer_vision_dataset,target=/workspaces/Tethys_computer_vision_dataset,type=bind",
-    "source=/home/student/FLSea_ds,target=/workspaces/FLSea_ds,type=bind"
+    //"source=/home/student/Tethys_computer_vision_dataset,target=/workspaces/Tethys_computer_vision_dataset,type=bind",
+    //"source=/home/student/FLSea_ds,target=/workspaces/FLSea_ds,type=bind",
+    "source=/media/tethys/WD_BLACK/depth_estimation_data,target=/workspaces/depth_estimation_data,type=bind"
   ],
   // Opcional: Instala dependencias automáticamente si tienes un requirements.txt
   "postCreateCommand": "sudo apt-get update && sudo apt-get install -y libgl1 && pip install --upgrade pip && pip install -r dependencies.txt",

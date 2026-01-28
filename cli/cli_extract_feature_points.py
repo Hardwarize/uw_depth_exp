@@ -5,7 +5,6 @@
 import cv2
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
 
 from os.path import exists
 from pathlib import Path
@@ -124,6 +123,17 @@ def create_features_file(samples_idx_file):
     dataset = get_model_dataset(samples_idx_file=samples_idx_file, shuffle=False)
     path_tuples = dataset.path_tuples
 
+
+    # brute force matcher
+    bf_matcher = cv2.BFMatcher(cv2.NORM_L2, crossCheck=True)
+
+    # for all imgs
+    n_tuples = len(path_tuples)
+    i = 0
+    prev_keypoints = None
+    prev_descriptors = None
+    prev_img = None
+
     ##########################################
     ##########################################
     ##########################################
@@ -157,14 +167,64 @@ def create_features_file(samples_idx_file):
             interpolation=cv2.INTER_NEAREST,  # make sure depth is not interpolated
         )
 
-        # for usage right now
-        standalone_keypoints, _ = get_keypoints_and_descriptors(
-            img, n_rows, n_cols, n_keypoints_direct
-        )
+        # find points for depth prior
+        if prev_keypoints is None:
 
-        # convert to np (row x column convention)
-        pts = np.array([[kp.pt[1], kp.pt[0]] for kp in standalone_keypoints])
+            # for usage in next frame
+            keypoints, descriptors = get_keypoints_and_descriptors(
+                img, n_rows, n_cols, n_keypoints_matching
+            )
 
+            # for usage right now
+            standalone_keypoints, _ = get_keypoints_and_descriptors(
+                img, n_rows, n_cols, n_keypoints_direct
+            )
+
+            # convert to np (row x column convention)
+            pts = np.array([[kp.pt[1], kp.pt[0]] for kp in standalone_keypoints])
+
+        else:
+
+            # get keypoints and descriptors
+            keypoints, descriptors = get_keypoints_and_descriptors(
+                img, n_rows, n_cols, n_keypoints_matching
+            )
+
+            # match descriptors
+            matches = bf_matcher.match(descriptors, prev_descriptors)
+
+            # extract points in correct order
+            pts_xy = [keypoints[match.queryIdx].pt for match in matches]
+            pts_prev_xy = [prev_keypoints[match.trainIdx].pt for match in matches]
+            pts_xy = np.array(pts_xy, dtype=np.float32)
+            pts_prev_xy = np.array(pts_prev_xy, dtype=np.float32)
+
+            # filter matches with epipolar constraints
+            F, mask = cv2.findFundamentalMat(pts_xy, pts_prev_xy, cv2.FM_LMEDS)
+            #pts_xy_outlier = pts_xy[mask.ravel() == 0]
+            #pts_prev_xy_outlier = pts_prev_xy[mask.ravel() == 0]
+            pts_xy = pts_xy[mask.ravel() == 1]
+            pts_prev_xy = pts_prev_xy[mask.ravel() == 1]
+
+            # convert to row x column standard
+            pts = np.flip(pts_xy, axis=1)
+            #pts_prev = np.flip(pts_prev_xy, axis=1)
+            #pts_outlier = np.flip(pts_xy_outlier, axis=1)
+            #pts_prev_outlier = np.flip(pts_prev_xy_outlier, axis=1)
+
+            # if there are too few matches just use detected features without matching
+            if len(pts) < n_keypoints_min:
+                print(
+                    f"WARNING: img {rgb_path} has {len(pts)} < {n_keypoints_min} features."
+                    + " Using unfiltered one-shot approach..."
+                )
+
+                standalone_keypoints, _ = get_keypoints_and_descriptors(
+                    img, n_rows, n_cols, n_keypoints_direct
+                )
+                # convert to np (row x column convention)
+                pts = np.array([[kp.pt[1], kp.pt[0]] for kp in standalone_keypoints])
+                print(f"img now has {len(pts)} features.")
 
         # index transform to fit output shape
         height_scale = out_height / in_height
@@ -195,5 +255,8 @@ def create_features_file(samples_idx_file):
         if i % 50 == 0:
             print(f"processed {i}/{n_tuples}: {len(row_col_depth)} priors")
         i += 1
+
+        prev_keypoints = keypoints
+        prev_descriptors = descriptors
 
     print("Done.")

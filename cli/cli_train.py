@@ -26,8 +26,8 @@ from cli.data_utils.model_dataset.model_dataset import get_model_dataset
 # training parameters
 BATCH_SIZE = 8
 LEARNING_RATE = 0.0001
-LEARNING_RATE_DECAY = 1.0
-EPOCHS = 100
+LEARNING_RATE_DECAY = 0.9
+EPOCHS = 25
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 LOSS_FUNCTIONS = {
@@ -66,7 +66,7 @@ WRITE_VALIDATION_IMG_EVERY_N_BATCHES = 300
 ############################################################
 
 
-def train_UDFNet():
+def train_UDFNet(train_samples: list, val_samples: list):
     """Train loop to train a UDFNet model."""
 
     # print run infos
@@ -89,8 +89,8 @@ def train_UDFNet():
     # optimizer
     optimizer = AdamW(model.parameters(), lr=LEARNING_RATE)
 
-    TRAIN_DATASET = get_model_dataset(samples_idx_file="/workspaces/uw_depth_exp/data_artifacts/samples/flsea__canyons__flatiron/samples.csv", train=True, shuffle=True, device=DEVICE)
-    VALIDATION_DATASET = get_model_dataset(samples_idx_file="/workspaces/uw_depth_exp/data_artifacts/samples/flsea__canyons__flatiron/samples.csv", train=False, shuffle=True, device=DEVICE) 
+    TRAIN_DATASET = get_model_dataset(samples_idx_file=train_samples, train=True, shuffle=True, device=DEVICE)
+    VALIDATION_DATASET = get_model_dataset(samples_idx_file=val_samples, train=False, shuffle=True, device=DEVICE) 
 
     # dataloaders
     train_dataloader = DataLoader(TRAIN_DATASET, batch_size=BATCH_SIZE, shuffle=True)

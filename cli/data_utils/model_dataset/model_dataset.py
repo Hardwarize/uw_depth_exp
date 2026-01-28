@@ -1,3 +1,5 @@
+from pathlib import PosixPath
+
 from depth_estimation.utils.data import (
     InputTargetDataset,
     IntPILToTensor,
@@ -13,16 +15,26 @@ import csv
 
 
 def get_model_dataset(
-    samples_idx_file: str, train=False, shuffle=False, device="cpu"
+    samples_idx_file, train=False, shuffle=False, device="cpu"
 ):
 
     # filenames
     rgb_depth_priors_tuples = []
-    try:
-        lines = csv.reader(open(samples_idx_file).read().splitlines())
-        rgb_depth_priors_tuples += [i[1:] for i in lines]
-    except FileNotFoundError:
-        print(f"{samples_idx_file} not found, skipping...")
+
+    if isinstance(samples_idx_file, PosixPath):
+        try:
+            lines = csv.reader(open(samples_idx_file).read().splitlines())
+            rgb_depth_priors_tuples += [i[1:] for i in lines]
+        except FileNotFoundError:
+            print(f"{samples_idx_file} not found, skipping...")
+    
+    elif isinstance(samples_idx_file, list):
+        for file in samples_idx_file:
+            try:
+                lines = csv.reader(open(file).read().splitlines())
+                rgb_depth_priors_tuples += [i[1:] for i in lines]
+            except FileNotFoundError:
+                print(f"{samples_idx_file} not found, skipping...")
 
     # transforms
     if train:
