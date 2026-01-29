@@ -151,6 +151,9 @@ def create_features_file(samples_idx_file):
     # main loop
     for path_tuple in path_tuples:
 
+        if i < 5:
+            print(path_tuple[0])
+
         # paths
         rgb_path = path_tuple[0]
         depth_path = path_tuple[1]
