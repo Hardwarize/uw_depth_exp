@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+from cli.data_utils.depth_dataset.depth_dataset import DepthDataset
 
 # This module assumes that the following environment variables are set:
 # FEATURES_ROOT: path to the root folder containing features csv files
@@ -62,4 +63,10 @@ class DataProvider:
         return [f.name for f in Path(self.root_path).iterdir() if f.is_dir()]
 
     def get_datasets(self):
-        return [DepthDataset(self, dataset_name) for dataset_name in self.list_datasets()]
+        return [DepthDataset(
+            provider_name=self.name,
+            provider_root_path=str(self.root_path),
+            dataset_name=dataset_name,
+            rgb_subpath=str(self.rgb_root),
+            depth_subpath=str(self.depth_root)
+        ) for dataset_name in self.list_datasets()]

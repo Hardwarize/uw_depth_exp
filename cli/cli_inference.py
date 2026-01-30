@@ -39,15 +39,18 @@ dmax = []
 
 
 @torch.no_grad()
-def test():
+def test(model_path=MODEL_PATH, save_outputs=False):
 
     # device info
     print(f"Using device {DEVICE}")
 
+    if model_path == MODEL_PATH:
+        print(f"Warning! Using default model path: {MODEL_PATH}")
+    
     # model
-    print(f"Loading model from {MODEL_PATH}")
+    print(f"Loading model from {model_path}")
     model = UDFNet(n_bins=80).to(DEVICE)
-    model.load_state_dict(torch.load(MODEL_PATH, map_location=DEVICE))
+    model.load_state_dict(torch.load(model_path, map_location=DEVICE))
     model.eval()
     print(f"Loading model done.")
 

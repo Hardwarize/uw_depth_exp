@@ -89,6 +89,11 @@ class InputTargetDataset:
             print("Depth priors is None, trying other image as substitution ...")
             random_idx = np.random.randint(0, len(self))
             return self[random_idx]  # recursion
+        
+        if depth_samples.shape[0] < 100:
+            print("Not enough depth priors, trying other image as substitution ...")
+            random_idx = np.random.randint(0, len(self))
+            return self[random_idx]  # recursion
 
         # get dense parametrization from sparse priors
         parametrization = get_depth_prior_from_features(

@@ -68,6 +68,7 @@ WRITE_VALIDATION_IMG_EVERY_N_BATCHES = 300
 
 def train_UDFNet(train_samples: list, val_samples: list):
     """Train loop to train a UDFNet model."""
+    torch.autograd.set_detect_anomaly(True)
 
     # print run infos
     run_name = f"udfnet_lr{LEARNING_RATE}_bs{BATCH_SIZE}_lrd{LEARNING_RATE_DECAY}"

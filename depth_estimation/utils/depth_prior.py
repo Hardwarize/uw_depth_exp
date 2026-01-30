@@ -1,9 +1,6 @@
 import torch
 from torch.distributions.normal import Normal
 
-from scipy.interpolate import RBFInterpolator
-import numpy as np
-
 
 def get_distance_maps(height, width, idcs_height, idcs_width, device="cpu"):
     """Returns a SxHxW tensor that captures the euclidean pixel distance to S
@@ -143,22 +140,75 @@ def get_depth_prior_from_ground_truth(
 
     return parametrization, features
 
-def get_rbf_from_features(
-        features,
-        height=240,
-        width=320
-    ):
 
-    xx, yy = np.meshgrid(np.arange(height), np.arange(width), indexing='ij')
-    grid_points = np.column_stack((xx.ravel(), yy.ravel()))
-
-    pts = features[0, ...].unique(dim=0)[:,:2].cpu()
-    values = features[0, ...].unique(dim=0)[:,2].cpu()
-
-    interpolator = RBFInterpolator(pts, values, kernel="linear")
-    rbf = interpolator(grid_points).reshape((height, width))
+def rbf_interpolate_batched_correct(
+    features,
+    height=240,
+    width=320,
+    smoothing=1e-5 # Regularization to prevent singular matrices
+):
+    """
+    Real RBF Interpolation (Linear Kernel) on GPU.
+    Mathematically equivalent to scipy.interpolate.RBFInterpolator(kernel='linear')
+    """
     
-    return torch.from_numpy(rbf).to(features.device)
+    device = features.device
+    B, N, _ = features.shape
+
+    # 1. Split coordinates (X) and values (Y)
+    # pts: (B, N, 2)
+    # values: (B, N, 1) <- Important to keep the last dimension
+    pts = features[:, :, :2]
+    values = features[:, :, 2:3] 
+
+    # ---------------------------------------------------------
+    # STEP A: TRAINING (Solve the linear system)
+    # Equation: K * W = Y  ->  W = inv(K) * Y
+    # ---------------------------------------------------------
+    
+    # Distance matrix between known points (Kernel Matrix)
+    # Shape: (B, N, N)
+    dist_matrix = torch.cdist(pts, pts)
+    
+    # Scipy 'linear' kernel is simply f(r) = r, so we use the distance as is.
+    # Add a small value to the diagonal for numerical stability (smoothing)
+    eye = torch.eye(N, device=device).unsqueeze(0).expand(B, -1, -1)
+    K = dist_matrix + (eye * smoothing)
+
+    # Solve to find the weights
+    # Shape: (B, N, 1)
+    # This is the costly part: O(N^3), but fast on GPU for N < 5000
+    weights = torch.linalg.solve(K, values)
+
+    # ---------------------------------------------------------
+    # STEP B: INTERPOLATION (Project onto the grid)
+    # ---------------------------------------------------------
+
+    # Create coordinate grid
+    xx, yy = torch.meshgrid(
+        torch.arange(height, device=device, dtype=features.dtype),
+        torch.arange(width, device=device, dtype=features.dtype),
+        indexing="ij"
+    )
+    # Shape: (H*W, 2) -> then expand to (B, H*W, 2)
+    grid_flat = torch.stack([xx.flatten(), yy.flatten()], dim=-1)
+    grid_batch = grid_flat.unsqueeze(0).expand(B, -1, -1)
+
+    # Compute distance from each image pixel to each known point
+    # Shape: (B, H*W, N)
+    dist_interp = torch.cdist(grid_batch, pts)
+    
+    # Compute final value: Distances * Weights
+    # (B, H*W, N) @ (B, N, 1) -> (B, H*W, 1)
+    result_flat = dist_interp @ weights
+    
+    # ---------------------------------------------------------
+    # 3. Final reshape
+    # ---------------------------------------------------------
+    rbf = result_flat.view(B, height, width)
+
+    return rbf
+
 
 def get_depth_prior_from_features(
     features,
@@ -212,7 +262,7 @@ def get_depth_prior_from_features(
 
         # nearest neighbor prior map
         # prior_map = depth_values[dist_argmin]  # 1xHxW
-        prior_map = get_rbf_from_features(
+        prior_map = rbf_interpolate_batched_correct(
             features,
             height=240,
             width=320
