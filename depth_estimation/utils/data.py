@@ -112,9 +112,12 @@ class InputTargetDataset:
         tensor_list = [input_img, target_img, mask, parametrization]
 
         # apply mutual transforms
+        # apply mutual transforms
         if self.all_transform is not None:
 
             tensor_list = self.all_transform(tensor_list)
+
+        tensor_list.append(input_fn)
 
         return tensor_list
 
@@ -198,9 +201,9 @@ class InputDataset:
                 width=320,
             ).squeeze(0)
 
-            return [input_img, parametrization]
+            return [input_img, parametrization, input_fn]
         else:
-            return [input_img]
+            return [input_img, input_fn]
 
 
 class MutualRandomHorizontalFlip:
@@ -382,6 +385,8 @@ def test_dataset():
         d_imgs = data[1]
         masks = data[2]
         parametrizations = data[3]
+        paths = data[4]
+        print(f"Paths: {paths}")
 
         for i in range(rgb_imgs.size(0)):
 

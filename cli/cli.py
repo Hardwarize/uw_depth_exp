@@ -103,18 +103,18 @@ def create_samples_idx_file(name: Annotated[Optional[str], typer.Argument()] = N
 @app.command()
 def create_features(name: Annotated[Optional[str], typer.Argument()] = None):
     
-    if name is None:
-        print("Listing datasets for all providers:")
-        for dp in DataProviders:
+    for dp in DataProviders:
+        if name in [None, dp.name]:
             print(f"Provider: {dp.name}")
             try:
                 datasets = dp.list_datasets()
                 for dataset in datasets:
+
                     ds = build_dataset(dp, dataset)
                     ds.create_features()
             except Exception as e:
                 print(f" - Error listing datasets: {e}")
-        return
+    return
 
 
 @app.command()
@@ -135,8 +135,6 @@ def check_features_random_image():
     # Resultado
     cv2.imwrite('kp_results.jpg', img)
     
-
-
 
 @app.command()
 def train(
@@ -166,6 +164,13 @@ def train(
     val_samples_csvs = get_csvs(val_ds)
 
     train_UDFNet(train_samples = train_samples_csvs, val_samples = val_samples_csvs)
+
+
+@app.command()
+def inference():
+    from cli.cli_inference import test, MODEL_PATH
+
+    test(model_path=MODEL_PATH)
 
 
 if __name__ == "__main__":

@@ -1,3 +1,5 @@
+import os
+
 import torch
 from torch.utils.data import DataLoader
 
@@ -16,12 +18,8 @@ from cli.data_utils.model_dataset.model_dataset import get_model_dataset
 BATCH_SIZE = 32
 DEVICE = "cuda"
 
-MODEL_PATH = "data/saved_models/model_e22_udfnet_lr0.0001_bs6_lrd0.9.pth"
-
-DATASET = get_model_dataset(samples_idx_file=[
-    '/workspaces/uw_depth_exp/data_artifacts/samples/flsea__red_sea__sub_pier/samples.csv',
-    '/workspaces/uw_depth_exp/data_artifacts/samples/flsea__canyons__u_canyon/samples.csv'
-], shuffle=False)
+#MODEL_PATH = "data/saved_models/model_e22_udfnet_lr0.0001_bs6_lrd0.9.pth"
+MODEL_PATH = "/workspaces/depth_estimation_data/training_artifacts/trial_01/saved_models/model_e10_udfnet_lr0.0001_bs8_lrd0.9.pth"
 
 ############################################################
 ############################################################
@@ -39,10 +37,23 @@ dmax = []
 
 
 @torch.no_grad()
-def test(model_path=MODEL_PATH, save_outputs=False):
-
+#def test(model_path=MODEL_PATH, datasets_samples_files = ['/workspaces/uw_depth_exp/data_artifacts/samples/Repmus_motorbike/samples.csv'], trial_name: str = 'test'):
+#def test(model_path=MODEL_PATH, datasets_samples_files = ['/workspaces/uw_depth_exp/data_artifacts/samples/Orsted_encirclement/samples.csv'], trial_name: str = 'test'):
+#def test(model_path=MODEL_PATH, datasets_samples_files = ['/workspaces/uw_depth_exp/data_artifacts/samples/Oceanpact_box/samples.csv'], trial_name: str = 'test'):
+def test(model_path=MODEL_PATH, datasets_samples_files = ['/workspaces/uw_depth_exp/data_artifacts/samples/Limknow_drutenpv3/samples.csv'], trial_name: str = 'test'):
+    #def test(model_path=MODEL_PATH, datasets_samples_files = ['/workspaces/uw_depth_exp/data_artifacts/samples/Limknow_drutenpv2/samples.csv'], trial_name: str = 'test'):
     # device info
     print(f"Using device {DEVICE}")
+
+    output_rgb_files = []
+    output_predictions = []
+    output_masked_predictions = []
+    output_rgb_paths = []
+    output_rgb_inputs = []
+    output_gt_depths = [] 
+
+    #if trial_name and not os.getenv("RESULT_ARTIFACTS_ROOT"):
+    #    print(f"If trial_name is provided, RESULT_ARTIFACTS_ROOT env var must be set.")
 
     if model_path == MODEL_PATH:
         print(f"Warning! Using default model path: {MODEL_PATH}")
@@ -54,8 +65,10 @@ def test(model_path=MODEL_PATH, save_outputs=False):
     model.eval()
     print(f"Loading model done.")
 
+    dataset = get_model_dataset(samples_idx_file=datasets_samples_files, shuffle=False)
+
     # dataloader
-    dataloader = DataLoader(DATASET, batch_size=BATCH_SIZE, drop_last=True)
+    dataloader = DataLoader(dataset, batch_size=BATCH_SIZE, drop_last=False)
 
     n_batches = len(dataloader)
     ranges = [None, 5.0, 1.0]
@@ -70,6 +83,7 @@ def test(model_path=MODEL_PATH, save_outputs=False):
         target = data[1].to(DEVICE)  # depth image
         mask = data[2].to(DEVICE)  # mask for valid values
         prior = data[3].to(DEVICE)  # precomputed features and depth values
+        rgb_paths = data[4]  # paths of rgb images
 
         dmax.append(target.max().item())
 
@@ -85,6 +99,15 @@ def test(model_path=MODEL_PATH, save_outputs=False):
         # for i in range(BATCH_SIZE):
         #     scales[i] = get_scale(prediction[i], target[i], priors_mask[i])
         # prediction = scales * prediction
+        if trial_name:
+            for i, pred in enumerate(prediction):
+                output_rgb_files.append(rgb_paths[i])
+                output_predictions.append(pred.cpu().numpy())
+                output_masked_predictions.append(pred[mask[i]].cpu().numpy())
+                output_masked_predictions.append(target[i][mask[i]].cpu().numpy())
+                output_rgb_paths.append(rgb_paths[i])
+                output_rgb_inputs.append(rgb[i].cpu().numpy())
+                output_gt_depths.append(target[i].cpu().numpy())
 
         # loss
         for i, r in enumerate(ranges):
@@ -132,6 +155,18 @@ def test(model_path=MODEL_PATH, save_outputs=False):
 
     print(f"max_depth mean: {np.mean(dmax)}")
     print(f"max_depth median: {np.median(dmax)}")
+
+    if trial_name:
+        np.savez_compressed(
+            'Limknow_drutenpv3_rbf.npz',
+            filenames=np.array(output_rgb_files),
+            preds=np.stack(output_predictions),
+            #masked=np.stack(output_masked_predictions),
+            gts=np.stack(output_gt_depths),
+            rgbs=np.stack(output_rgb_inputs),
+            rgb_paths=np.array(output_rgb_paths)
+        )
+
 
 def get_scale(prediction, target, mask):
     

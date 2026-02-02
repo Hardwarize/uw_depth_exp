@@ -202,15 +202,21 @@ def create_features_file(samples_idx_file):
             pts_xy = np.array(pts_xy, dtype=np.float32)
             pts_prev_xy = np.array(pts_prev_xy, dtype=np.float32)
 
-            # filter matches with epipolar constraints
-            F, mask = cv2.findFundamentalMat(pts_xy, pts_prev_xy, cv2.FM_LMEDS)
-            #pts_xy_outlier = pts_xy[mask.ravel() == 0]
-            #pts_prev_xy_outlier = pts_prev_xy[mask.ravel() == 0]
-            pts_xy = pts_xy[mask.ravel() == 1]
-            pts_prev_xy = pts_prev_xy[mask.ravel() == 1]
+            # Controll the situation with duplicate frames
+            if np.array_equal(pts_xy, pts_prev_xy):
+                print(f"WARNING: Duplicate frame detected for img {rgb_path}. Reusing features.")
+                pts = np.flip(pts_xy, axis=1)
+            else:
 
-            # convert to row x column standard
-            pts = np.flip(pts_xy, axis=1)
+                # filter matches with epipolar constraints
+                F, mask = cv2.findFundamentalMat(pts_xy, pts_prev_xy, cv2.FM_LMEDS)
+                #pts_xy_outlier = pts_xy[mask.ravel() == 0]
+                #pts_prev_xy_outlier = pts_prev_xy[mask.ravel() == 0]
+                pts_xy = pts_xy[mask.ravel() == 1]
+                pts_prev_xy = pts_prev_xy[mask.ravel() == 1]
+
+                # convert to row x column standard
+                pts = np.flip(pts_xy, axis=1)
             #pts_prev = np.flip(pts_prev_xy, axis=1)
             #pts_outlier = np.flip(pts_xy_outlier, axis=1)
             #pts_prev_outlier = np.flip(pts_prev_xy_outlier, axis=1)
@@ -235,10 +241,15 @@ def create_features_file(samples_idx_file):
         pts_scaled = pts * [height_scale, width_scale]
 
         # get depth values
-        depth_values = depth[
-            pts_scaled[:, 0].round().astype(int),
-            pts_scaled[:, 1].round().astype(int),
-        ]
+        # ensure indices are within bounds. If not an error arise if you have
+        # two consecutive frames with the same features
+        rows = pts_scaled[:, 0].round().astype(int)
+        cols = pts_scaled[:, 1].round().astype(int)
+        rows = np.clip(rows, 0, out_height - 1)
+        cols = np.clip(cols, 0, out_width - 1)
+
+        depth_values = depth[rows, cols]
+
         depth_values = depth_values[..., np.newaxis]
 
         # concat
