@@ -139,7 +139,8 @@ def check_features_random_image():
 @app.command()
 def train(
     train_ds: Annotated[str, typer.Option("-train", help="String for train datasets")],
-    val_ds: Annotated[str, typer.Option("-val", help="String for val datasets")]
+    val_ds: Annotated[str, typer.Option("-val", help="String for val datasets")],
+    pretrained_model: Annotated[Optional[str], typer.Option("-pretrained", help="Path to pretrained model")] = None
 ):
 
     def get_csvs(split_str):
@@ -163,7 +164,7 @@ def train(
     train_samples_csvs = get_csvs(train_ds)
     val_samples_csvs = get_csvs(val_ds)
 
-    train_UDFNet(train_samples = train_samples_csvs, val_samples = val_samples_csvs)
+    train_UDFNet(train_samples = train_samples_csvs, val_samples = val_samples_csvs, pretrained_model=pretrained_model)
 
 
 @app.command()

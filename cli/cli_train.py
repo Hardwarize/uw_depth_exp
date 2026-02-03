@@ -27,7 +27,7 @@ from cli.data_utils.model_dataset.model_dataset import get_model_dataset
 BATCH_SIZE = 8
 LEARNING_RATE = 0.0001
 LEARNING_RATE_DECAY = 0.9
-EPOCHS = 25
+EPOCHS = 20
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 LOSS_FUNCTIONS = {
@@ -66,7 +66,7 @@ WRITE_VALIDATION_IMG_EVERY_N_BATCHES = 300
 ############################################################
 
 
-def train_UDFNet(train_samples: list, val_samples: list):
+def train_UDFNet(train_samples: list, val_samples: list, pretrained_model: str = None):
     """Train loop to train a UDFNet model."""
     torch.autograd.set_detect_anomaly(True)
 
@@ -86,6 +86,18 @@ def train_UDFNet(train_samples: list, val_samples: list):
 
     # initialize model
     model = UDFNet(n_bins=80).to(DEVICE)
+    
+    start_epoch = 0
+    if pretrained_model is not None:
+        print(f"Loading pretrained model from: {pretrained_model}")
+        model.load_state_dict(torch.load(pretrained_model))
+        
+        # Try to infer epoch from filename
+        import re
+        match = re.search(r"model_e(\d+)_", pretrained_model)
+        if match:
+            start_epoch = int(match.group(1)) + 1
+            print(f"Resuming training from epoch {start_epoch}")
 
     # optimizer
     optimizer = AdamW(model.parameters(), lr=LEARNING_RATE)
@@ -98,7 +110,7 @@ def train_UDFNet(train_samples: list, val_samples: list):
     validation_dataloader = DataLoader(VALIDATION_DATASET, batch_size=BATCH_SIZE)
 
     # train epochs
-    for epoch in range(EPOCHS):
+    for epoch in range(start_epoch, EPOCHS):
 
         # decayed learning rate
         lr = LEARNING_RATE * (LEARNING_RATE_DECAY**epoch)
